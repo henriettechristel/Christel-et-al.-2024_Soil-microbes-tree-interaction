@@ -1,0 +1,522 @@
+---
+title: "Supplementary Material 2"
+subtitle: "The spatial distribution of tree-tree interaction effects on soil microbial biomass and respiration"
+author: "  Henriette Christel, Simone Cesarz, Nico Eisenhauer, Georg J. A. Hähn and Rémy Beugnon"
+output:
+  pdf_document:
+    fig_width: 20
+    fig_height: 20
+    fig_caption: yes
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,  
+                      collapse = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  out.width = "100%",
+  dpi = 150)
+library("tidyverse")
+library("tidyr")
+library("readxl")
+library("lme4")
+library("lmerTest")
+library("performance")
+library("ggiraphExtra")
+library("modelr")
+library("ggpubr")
+library("patchwork")
+library("ggeffects")
+library("kableExtra")
+library("corrplot")
+library("dplyr")
+library("ggplot2")
+library("marginaleffects")
+```
+
+```{r}
+#### read in data ####
+
+transect <- read_xlsx("../01_data_transect_2019/transect_data.xlsx")
+
+#create dataset with mono pairs only
+transect2 <- transect %>% filter(species_mix != "Liqu-Sapi")
+
+variables <- read_xlsx("../01_data_transect_2019/variable_description.xlsx")
+
+```
+
+## Figure S1: Correlation matrix
+
+```{r, fig.alt= "A correlation matrix of the variables used"}
+# create new numeric column for species mixture of pairs
+transect$mixture <- transect$species_mix 
+transect$mixture <- ifelse(transect$mixture == "Liqu-Liqu", "1",  #Liqu-Liqu mono pair = 1
+                           ifelse(transect$mixture == "Sapi-Sapi", "2", "3")) #Sapi-Sapi mono pair = 2, mixture = 3
+transect$mixture <- as.numeric(transect$mixture)
+
+#### create correlation matrix of dataset (only for numeric values) ####
+transect_matrix <- transect %>%
+  select_if(is.numeric)
+transect_matrix <- transect_matrix %>% dplyr::select(depth, root_biomass, rh, bas_res, cmic, plant_distance, close_distance, close_biomass, mixture) 
+
+transect.corr <- cor(transect_matrix, use = 'pairwise.complete.obs') #choose pairwise complete instead of all
+
+
+#### corrplot with coloured background ####
+colnames(transect.corr) = c(" depth", " root biomass", " soil water content", " basal respiration", " microbial biomass", " distance to understory plants", " distance to closest tree", " biomass of closest tree", " tree pair mixture")
+rownames(transect.corr) = c("depth", "root biomass", "soil water content", "basal respiration", "microbial biomass", "distance to understory plants", "distance to closest tree", "biomass of closest tree", "tree pair mixture")
+coloured.corr <- corrplot(transect.corr, method="color",  
+                          type = "lower", order = "original", 
+                          addCoef.col = "black", # Add coefficient of correlation
+                          tl.col = "black", tl.srt = 45, number.cex = 2.5, tl.cex = 2.5, #Text label color and rotation
+                          col = COL2('BrBG', 10), #color scheme 
+                          sig.level = 0.01, insig = "blank", # hide correlation coefficient on the principal diagonal
+                          diag = FALSE)
+```
+
+\newpage
+
+## Section S2: Microbial respiration (H1)
+
+### Model summary
+
+lmer(formula = bas_res ~ close_distance * depth   + (1|plot), data = df)
+
+```{r}
+mod <- lmer(formula = bas_res ~ close_distance * depth   + (1|plot), data = transect2)
+summary(mod)$coefficients %>% 
+  as.data.frame() %>% 
+  dplyr::select(-df) %>% 
+  `colnames<-`(c("Estimate", "Std. Error", "t-value", "p-value")) %>% 
+  kbl() %>% 
+  kable_paper() %>% 
+  kable_styling(latex_options = "HOLD_position") 
+```
+
+### Model fit
+
+```{r, include=FALSE}
+p <- check_model(mod)
+
+pp <- plot(p) 
+
+for(i in 1:7){
+pp[[i]] <- pp[[i]] + ggplot2::theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+}
+```
+
+```{r}
+pp
+```
+
+
+\newpage
+
+## Section S3: Microbial biomass (H1)
+
+### Model summary
+
+lmer(formula = cmic ~ close_distance * depth   + (1|plot), data = df)
+
+```{r}
+mod1 <- lmer(formula = cmic ~ close_distance * depth   + (1|plot), data = transect2)
+summary(mod1)$coefficients %>% 
+  as.data.frame() %>% 
+  dplyr::select(-df) %>% 
+  `colnames<-`(c("Estimate", "Std. Error", "t-value", "p-value")) %>% 
+  kbl() %>% 
+  kable_paper() %>% 
+  kable_styling(latex_options = "HOLD_position") 
+```
+
+### Model fit
+
+```{r, include=FALSE}
+q <- check_model(mod1)
+
+qq <- plot(q) 
+
+for(i in 1:7){
+qq[[i]] <- qq[[i]] + ggplot2::theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+}
+```
+
+```{r}
+qq
+```
+
+\newpage
+
+```{r, include=FALSE}
+over.out <- readRDS("../01_data_transect_2019/transect_over.RDS")
+```
+
+## Section S4: Overyielding microbial respiration (H2)
+
+### Model summary
+
+lmer(bas_over ~ depth   + (1|plot), data = df)
+
+```{r}
+bas.depth <- lmer(bas_over ~ depth   + (1|plot), data = over.out)
+summary(bas.depth)$coefficients %>% 
+  as.data.frame() %>% 
+  dplyr::select(-df) %>% 
+  `colnames<-`(c("Estimate", "Std. Error", "t-value", "p-value")) %>% 
+  kbl() %>% 
+  kable_paper() %>% 
+  kable_styling(latex_options = "HOLD_position") 
+```
+
+### Figure 3 Tukey test - depth
+
+```{r}
+tukey.bas <- aov(bas_over ~ depth  %>% as.factor, over.out)
+summary(tukey.bas)[[1]] %>%
+  as.data.frame() %>% 
+  dplyr::select(-Df) %>% 
+  `colnames<-`(c("Sum Sq.", "Mean Sq.", "f-value", "p-value")) %>% 
+  kbl() %>% 
+  kable_paper() %>% 
+  kable_styling(latex_options = "HOLD_position") 
+```
+
+
+```{r}
+TukeyHSD(tukey.bas, conf.level=.95)[[1]] %>% 
+   as.data.frame() %>% 
+   `colnames<-`(c("Diff", "Lower", "Upper", "p-value")) %>% 
+   kbl() %>% 
+   kable_paper() %>% 
+   kable_styling(latex_options = "HOLD_position") 
+```
+
+### Model fit
+
+```{r, include=FALSE}
+b <- check_model(bas.depth)
+
+bb <- plot(b) 
+
+for(i in 1:6){
+bb[[i]] <- bb[[i]] + ggplot2::theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+}
+```
+
+```{r}
+bb
+```
+
+\newpage
+## Section S5: Overyielding microbial biomass (H2)
+
+### Model summary
+
+lmer(cmic_over ~ depth   + (1|plot), data = df)
+
+```{r}
+cmic.depth <- lmer(cmic_over ~ depth   + (1|plot), data = over.out)
+summary(cmic.depth)$coefficients %>% 
+  as.data.frame() %>% 
+  dplyr::select(-df) %>% 
+  `colnames<-`(c("Estimate", "Std. Error", "t-value", "p-value")) %>% 
+  kbl() %>% 
+  kable_paper() %>% 
+  kable_styling(latex_options = "HOLD_position") 
+```
+
+### Figure 3 Tukey test - depth
+
+```{r}
+tukey.cmic <- aov(cmic_over ~ depth %>% as.factor, over.out)
+summary(tukey.cmic)[[1]] %>%
+  as.data.frame() %>% 
+  dplyr::select(-Df) %>% 
+  `colnames<-`(c("Sum Sq.", "Mean Sq.", "f-value", "p-value")) %>% 
+  kbl() %>% 
+  kable_paper() %>% 
+  kable_styling(latex_options = "HOLD_position") 
+```
+
+
+```{r}
+TukeyHSD(tukey.cmic, conf.level=.95)[[1]] %>% 
+   as.data.frame() %>% 
+   `colnames<-`(c("Diff", "Lower", "Upper", "p-value")) %>% 
+   kbl() %>% 
+   kable_paper() %>% 
+   kable_styling(latex_options = "HOLD_position") 
+```
+
+### Model fit
+
+```{r, include=FALSE}
+C <- check_model(cmic.depth)
+
+CC <- plot(C) 
+
+for(i in 1:6){
+CC[[i]] <- CC[[i]] + ggplot2::theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+}
+```
+
+```{r}
+CC
+```
+
+\newpage
+
+## Section S6: Spatial distribution of microbial respiration overyielding (H3)
+
+### Model summary
+
+lmer(bas_over ~ dist.T1.center * depth   + (1|plot), data = df)
+
+```{r}
+bas.dist.depth <- lmer(bas_over ~ dist.T1.center * depth   + (1|plot), data = over.out)
+summary(bas.dist.depth)$coefficients %>% 
+  as.data.frame() %>% 
+  dplyr::select(-df) %>% 
+  `colnames<-`(c("Estimate", "Std. Error", "t-value", "p-value")) %>% 
+  kbl() %>% 
+  kable_paper() %>% 
+  kable_styling(latex_options = "HOLD_position") 
+```
+
+### Model fit
+
+```{r, include=FALSE}
+C <- check_model(bas.dist.depth)
+
+CC <- plot(C) 
+
+for(i in 1:7){
+CC[[i]] <- CC[[i]] + ggplot2::theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+}
+```
+
+```{r}
+CC
+```
+
+\newpage
+
+## Section S7: Spatial distribution of microbial biomass overyielding (H3)
+
+### Model summary
+
+lmer(cmic_over ~ dist.T1.center * depth   + (1|plot), data = df)
+
+```{r}
+cmic.dist.depth <- lmer(cmic_over ~ dist.T1.center * depth   + (1|plot), data = over.out)
+summary(cmic.dist.depth)$coefficients %>% 
+  as.data.frame() %>% 
+  dplyr::select(-df) %>% 
+  `colnames<-`(c("Estimate", "Std. Error", "t-value", "p-value")) %>% 
+  kbl() %>% 
+  kable_paper() %>% 
+  kable_styling(latex_options = "HOLD_position") 
+```
+
+### Model fit
+
+```{r, include=FALSE}
+C <- check_model(cmic.dist.depth)
+
+CC <- plot(C) 
+
+for(i in 1:7){
+CC[[i]] <- CC[[i]] + ggplot2::theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+}
+```
+
+```{r}
+CC
+```
+
+\newpage
+
+## Figure S2: Abiotic and biotic drivers of soil microbial biomass and respiration
+```{r, include=FALSE}
+tree_bio_br <- ggplot(data = transect, aes(x = close_biomass * 1000, y = bas_res, col = close_species)) +
+  geom_smooth(data= transect, aes(x=close_biomass*1000, y= bas_res), method = 'lm', alpha = 0.2) +
+  geom_point(aes(color = close_species)) +
+  theme_bw() +
+  theme(legend.position = "right")+
+  theme(plot.background = element_rect(fill = "linen", colour = "linen")) +
+  labs( x = "Tree biomass [kg carbon]", y = "", color = "Closest tree", fill = "Closest tree") +
+  scale_color_manual(values = c("#6B3074", "#B4CF68"), labels = c(expression(italic("L. formosana")), 
+                                                                  expression(italic("S. mukorossi")))) +
+                       theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+
+# hier muss noch irgendwie die Legende drüber ohne das Bild kleiner zu machen
+
+tree_bio_cmic <- ggplot(data = transect, aes(x = close_biomass * 1000, y = cmic, col = close_species)) +
+  geom_smooth(data= transect, aes(x=close_biomass*1000, y= cmic, col = close_species), method = 'lm', alpha = 0.2, lty = 2) +
+  geom_point(aes(color = close_species)) +
+  theme_bw() +
+  theme(legend.position = "right") +
+  labs(x = "Tree biomass [kg carbon]", y = "", 
+       color = "Closest tree", fill = "Closest tree") +
+  scale_color_grey(start = 0.3, end = 0.7, labels = c(expression(italic("L. formosana")), 
+                                                      expression(italic("S. mukorossi")))) +
+  theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+
+# hier muss noch irgendwie die Legende drüber ohne das Bild kleiner zu machen
+
+#CMIC/BR ~ root biomass 
+root_fig_br <- ggplot(transect) + 
+  geom_point(aes(x = root_biomass, y = bas_res)) +
+  theme_bw() +
+  theme(plot.background = element_rect(fill = "linen", colour = "linen")) +
+  labs(x = "Root biomass [g]", y = "") +
+  theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+
+
+root_fig_cmic <- ggplot(transect) + 
+  geom_point(aes(x = root_biomass, y = cmic)) +
+  theme_bw() +
+  labs(x = "Root biomass [g]", y = "") +
+  theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+
+#CMIC/BR ~ plant distance 
+plant_fig_br <- ggplot(transect) + 
+  geom_point(aes(x = plant_distance, y = bas_res)) +
+  theme_bw() +
+  theme(plot.background = element_rect(fill = "linen", colour = "linen")) +
+  labs(x = "Distance to understory plants [cm]", y = "") +
+  theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+
+plant_fig_cmic <- ggplot(transect) + 
+  geom_point(aes(x = plant_distance, y = cmic)) +
+  theme_bw() +
+  labs(x = "Distance to understory plants [cm]", y = "") +
+  theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+
+#CMIC/BR ~ relative humidity 
+
+rh.bas <- lmer(formula = bas_res ~ rh + (1|plot), data = transect)
+rh.cmic <- lmer(formula = cmic ~ rh + (1|plot), data = transect)
+  
+  
+rh_fig_br <- ggplot(transect) + 
+  geom_point(aes(x = rh, y = bas_res)) +
+  geom_line(data = ggpredict(rh.bas, type = "fe") %>% as.data.frame(), 
+            aes(y = rh.predicted, x = rh.x),
+            color = "cornflowerblue", linewidth = 1) +
+  geom_ribbon(data = ggpredict(rh.bas, type = "fe") %>% as.data.frame(), 
+              aes(ymin =  rh.conf.low, ymax =  rh.conf.high, x = rh.x),
+              fill = "cornflowerblue", alpha = 0.1, linewidth = 1) +
+  theme_bw() +
+  theme(plot.background = element_rect(fill = "linen", colour = "linen")) +
+  labs(x = "Relative soil water content [%]", y = "") +
+  theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+
+
+rh_fig_cmic <- ggplot(transect) + 
+  geom_point(aes(x = rh, y = cmic)) +
+  geom_line(data = ggpredict(rh.cmic, type = "fe") %>% as.data.frame(), 
+            aes(y = rh.predicted, x = rh.x),
+            color = "cornflowerblue", linewidth = 1) +
+  geom_ribbon(data = ggpredict(rh.cmic, type = "fe") %>% as.data.frame(), 
+              aes(ymin =  rh.conf.low, ymax =  rh.conf.high, x = rh.x),
+              fill = "cornflowerblue", alpha = 0.1, linewidth = 1) +
+  theme_bw() +
+  labs(x= "Relative soil water content [%]", y = "") +
+  theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+
+#BR ~ CMIC
+
+mod.bas.cmic <- lmer(bas_res ~ cmic + (1|plot), transect)
+
+brcmic_fig <- ggplot(transect) + 
+  geom_point(aes(x = cmic, y = bas_res)) +
+  geom_line(data = ggpredict(mod.bas.cmic, type = "fe") %>% as.data.frame(), 
+            aes(y = cmic.predicted, x = cmic.x),
+            color = "darkblue", linewidth = 1) +
+  geom_ribbon(data = ggpredict(mod.bas.cmic, type = "fe") %>% as.data.frame(), 
+              aes(ymin =  cmic.conf.low, ymax =  cmic.conf.high, x = cmic.x),
+              fill = "darkblue", alpha = 0.1, linewidth = 1) +
+  labs(x= expression(atop(Microbial~biomass~"["*µg~Cmic~g^{-1}~dry~soil*"]")) , 
+       y = expression(atop(Microbial~respiration,"["*µl~O[2]~h^{-1}~g^{-1}~dry~soil*"]"))) +
+  theme_bw() +
+  theme(plot.background = element_rect(colour = "black")) +
+  theme(plot.title = element_text(size = 30),
+                                    plot.subtitle = element_text(size = 20),
+                                    axis.title = element_text(size = 25),
+                                    legend.text = element_text(size = 15))
+
+
+# arranging figures and adding common y-axis title
+cmic_graphics <- ggarrange(tree_bio_cmic, root_fig_cmic, plant_fig_cmic, rh_fig_cmic, 
+                           ncol = 1, nrow = 4, 
+                           labels = c("A", "C", "E", "G")) 
+
+cmic_graphic <- annotate_figure(cmic_graphics, left = text_grob(expression(atop(Microbial~biomass~"["*µg~Cmic~g^{-1}~dry~soil*"]")), 
+                                                                rot = 90, vjust = 1, size = 25)) +
+  theme(plot.background = element_rect(fill = "white", colour = "white"))
+
+
+
+basal_graphics <- ggarrange(tree_bio_br, root_fig_br, plant_fig_br, rh_fig_br, 
+                            ncol = 1, nrow = 4, 
+                            labels = c("B", "D", "F", "H"))
+
+basal_graphic <- annotate_figure(basal_graphics, left = text_grob(expression(atop(Microbial~respiration~"["*µl~O[2]~h^{-1}~g^{-1}~dry~soil*"]")), 
+                                                                  rot = 90, vjust = 1, size = 25)) +
+  theme(plot.background = element_rect(fill = "linen", colour = "linen"))
+
+
+#### combining graphics and saving side figures ####
+side_graphics <- ggarrange(ggarrange(cmic_graphic, basal_graphic, ncol = 2),
+                           brcmic_fig, labels = c("", "I") , nrow = 2, heights = c(4,2))
+```
+
+```{r}
+side_graphics
+```
+

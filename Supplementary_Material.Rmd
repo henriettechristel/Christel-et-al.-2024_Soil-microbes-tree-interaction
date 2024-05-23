@@ -1,7 +1,8 @@
 ---
 title: "Supplementary Material 2"
 subtitle: "The spatial distribution of tree-tree interaction effects on soil microbial biomass and respiration"
-author: "  Henriette Christel, Simone Cesarz, Nico Eisenhauer, Georg J. A. Hähn and Rémy Beugnon"
+date: "Henriette Christel, Helge, Bruelheide, Simone Cesarz, Nico Eisenhauer, Georg J. A. Hähn and Rémy Beugnon"
+
 output:
   pdf_document:
     fig_width: 20
@@ -39,24 +40,23 @@ library("marginaleffects")
 #### read in data ####
 
 transect <- read_xlsx("../01_data_transect_2019/transect_data.xlsx")
+over.out <- readRDS("../01_data_transect_2019/transect_over.RDS")
 
 #create dataset with mono pairs only
-transect2 <- transect %>% filter(species_mix != "Liqu-Sapi")
-
-variables <- read_xlsx("../01_data_transect_2019/variable_description.xlsx")
-
+transect.mono <- transect %>% filter(species_mix != "Liqu-Sapi")
+transect.het <- transect %>% filter(species_mix == "Liqu-Sapi")
 ```
 
 ## Figure S1: Correlation matrix
 
-```{r, fig.alt= "A correlation matrix of the variables used"}
+```{r}
 # create new numeric column for species mixture of pairs
 transect$mixture <- transect$species_mix 
 transect$mixture <- ifelse(transect$mixture == "Liqu-Liqu", "1",  #Liqu-Liqu mono pair = 1
                            ifelse(transect$mixture == "Sapi-Sapi", "2", "3")) #Sapi-Sapi mono pair = 2, mixture = 3
 transect$mixture <- as.numeric(transect$mixture)
 
-#### create correlation matrix of dataset (only for numeric values) ####
+# create correlation matrix of dataset (only for numeric values)
 transect_matrix <- transect %>%
   select_if(is.numeric)
 transect_matrix <- transect_matrix %>% dplyr::select(depth, root_biomass, rh, bas_res, cmic, plant_distance, close_distance, close_biomass, mixture) 
@@ -64,17 +64,21 @@ transect_matrix <- transect_matrix %>% dplyr::select(depth, root_biomass, rh, ba
 transect.corr <- cor(transect_matrix, use = 'pairwise.complete.obs') #choose pairwise complete instead of all
 
 
-#### corrplot with coloured background ####
+# corrplot names
 colnames(transect.corr) = c(" depth", " root biomass", " soil water content", " basal respiration", " microbial biomass", " distance to understory plants", " distance to closest tree", " biomass of closest tree", " tree pair mixture")
 rownames(transect.corr) = c("depth", "root biomass", "soil water content", "basal respiration", "microbial biomass", "distance to understory plants", "distance to closest tree", "biomass of closest tree", "tree pair mixture")
+```
+
+```{r}
 coloured.corr <- corrplot(transect.corr, method="color",  
                           type = "lower", order = "original", 
                           addCoef.col = "black", # Add coefficient of correlation
-                          tl.col = "black", tl.srt = 45, number.cex = 2.5, tl.cex = 2.5, #Text label color and rotation
+                          tl.col = "black", tl.srt = 45, number.cex = 2.5, tl.cex = 2.5, cl.cex = 2, #Text and legend label color and rotation
                           col = COL2('BrBG', 10), #color scheme 
                           sig.level = 0.01, insig = "blank", # hide correlation coefficient on the principal diagonal
                           diag = FALSE)
 ```
+Figure S1: A correlation matrix of the variables used. Brown colour indicates negative correlation, green colour indicates positive correlation.
 
 \newpage
 
@@ -85,7 +89,7 @@ coloured.corr <- corrplot(transect.corr, method="color",
 lmer(formula = bas_res ~ close_distance * depth   + (1|plot), data = df)
 
 ```{r}
-mod <- lmer(formula = bas_res ~ close_distance * depth   + (1|plot), data = transect2)
+mod <- lmer(formula = bas_res ~ close_distance * depth + (1|plot), data = transect.mono)
 summary(mod)$coefficients %>% 
   as.data.frame() %>% 
   dplyr::select(-df) %>% 
@@ -124,7 +128,7 @@ pp
 lmer(formula = cmic ~ close_distance * depth   + (1|plot), data = df)
 
 ```{r}
-mod1 <- lmer(formula = cmic ~ close_distance * depth   + (1|plot), data = transect2)
+mod1 <- lmer(formula = cmic ~ close_distance * depth   + (1|plot), data = transect.mono)
 summary(mod1)$coefficients %>% 
   as.data.frame() %>% 
   dplyr::select(-df) %>% 
@@ -152,6 +156,427 @@ qq[[i]] <- qq[[i]] + ggplot2::theme(plot.title = element_text(size = 30),
 ```{r}
 qq
 ```
+
+\newpage
+
+## Figure S2: Distance and depth effects for *Liquidambar formosana* in monospecific pairs
+
+```{r, include=FALSE}
+# 1. Liquidambar formosana
+transect.liquidambar <- transect.mono %>% filter(close_species == "Liquidambar formosana")
+
+## predicting data for basal respiration 
+modelr::data_grid(transect.liquidambar, bas_res, close_distance, depth)
+
+mod <- lmer(formula = bas_res ~ close_distance * depth + (1|plot), data = transect.liquidambar)
+
+modelr::data_grid(transect.liquidambar, .model = mod)
+
+d <- seq(from = 0, to = 10, by = 0.1)
+t <- seq(from = 0, to = 90, by = 0.1)
+
+newdata <- expand.grid(d,t)
+newdata$plot <- as.character("H31")
+
+colnames(newdata) <- c("depth2", "close_distance", "plot")
+
+# adding 2.5 to make 0-5cm = 2.5 and 5-10cm = 7.5
+transect.liquidambar$depth2 = transect.liquidambar$depth + 2.5
+
+mod.bas <- lmer(formula = bas_res ~ close_distance * depth2 +(1|plot), data = transect.liquidambar)
+predict(mod.bas)
+newdata$basres <- predict(mod.bas, newdata = newdata)
+
+min(newdata$basres)
+max(newdata$basres)
+mean(newdata$basres) #used as midpoint in graphic colour scheme
+
+
+# fig. 3 - showing depht and distance effects beautifully
+basal_liquidambar <- ggplot(data = newdata, aes(x=close_distance, y=depth2, z=basres, fill = basres)) +
+  geom_raster() +
+  scale_fill_gradient2(low = ("purple4"), 
+                       high = ("darkorange"), 
+                       midpoint = mean(newdata$basres),
+                       breaks = c(1.5,2.1,2.7)) +
+  scale_y_continuous(trans = "reverse", 
+                     breaks = c(0, 5, 10), 
+                     labels = c("0", "5", "10")) +
+  scale_x_continuous(breaks = c(0, 30, 60, 90), 
+                     labels = c("0", "30", "60", "90")) +
+  coord_equal() +
+  labs(x= "Distance to tree [cm]", 
+       y="Depth [cm]", 
+       fill = expression(atop(Microbial~respiration,"["*µl~O[2]~h^{-1}~g^{-1}~dry~soil*"]")),
+       subtitle = "distance    , depth  *  , distance x depth") +
+  theme(panel.background = element_blank(),
+        plot.title=element_text(hjust=0),
+        axis.title = element_text(size = 28),
+        axis.ticks=element_blank(),
+        axis.text=element_text(size=26),
+        legend.title=element_text(size=28),
+        legend.text=element_text(size=26),
+        legend.position = "right",     axis.line.y = element_line(arrow = grid::arrow(length = unit(0.3, "cm"), 
+                                                                                      ends = "first")),
+        plot.subtitle = element_text(size = 27, 
+                                     hjust = 0.5,
+                                     colour = "grey30"))
+
+## predicting data for cmic 
+modelr::data_grid(transect.liquidambar, cmic, close_distance, depth)
+
+mod1 <- lmer(formula = cmic ~ close_distance * depth + (1|plot), data = transect.liquidambar)
+
+d <- seq(from = 0, to = 10, by = 0.1)
+t <- seq(from = 0, to = 90, by = 0.1)
+
+newdata1 <- expand.grid(d,t)
+
+newdata1$plot <- as.character("H31")
+
+colnames(newdata1) <- c("depth2", "close_distance", "plot")
+
+# adding 2.5 to make 0-5cm = 2.5 and 5-10cm = 7.5
+transect.liquidambar$depth2 = transect.liquidambar$depth + 2.5
+
+mod.cmic <- lmer(formula = cmic ~ close_distance * depth2 + (1|plot), data = transect.liquidambar)
+predict(mod.cmic)
+newdata1$cmic <- predict(mod.cmic, newdata = newdata1)
+
+min(newdata1$cmic)
+max(newdata1$cmic)
+mean(newdata1$cmic) #used as midpoint in graphic colour scheme
+
+# fig. 3 - showing depht and distance effects beautifully
+cmic_liquidambar <- ggplot(data = newdata1, aes(x=close_distance, y=depth2, z=cmic, fill = cmic)) +
+  geom_raster() +
+  #guides(fill=guide_colorbar(ticks.colour = NA)) +
+  scale_fill_gradient2(low = ("royalblue4"), 
+                       high = ("firebrick3"), 
+                       midpoint = mean(newdata1$cmic), 
+                       breaks = c(550, 400, 250)) +
+  scale_y_continuous(trans = "reverse", 
+                     breaks = c(0, 5, 10), 
+                     labels = c("0", "5", "10")) +
+  scale_x_continuous(breaks = c(0, 30, 60, 90), 
+                     labels = c("0", "30", "60", "90")) +
+  coord_equal() +
+  labs(x= "Distance to tree [cm]", 
+       y= "Depth [cm]", 
+       fill = expression(atop(Microbial~biomass,"["*µg~Cmic~g^{-1}~dry~soil*"]")),
+       subtitle = "distance   , depth  **, distance x depth") +
+  theme(panel.background = element_blank(),
+        #plot.title=element_text(hjust=0),
+        axis.ticks=element_blank(),
+        axis.text=element_text(size=26),
+        axis.title = element_text(size = 28),
+        legend.title=element_text(size=28),
+        legend.text=element_text(size=26),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.y = element_line(arrow = grid::arrow(length = unit(0.3, "cm"), 
+                                                       ends = "first")),
+        legend.position = "right",
+        plot.subtitle = element_text(size = 27,
+                                     hjust = 0.5,
+                                     colour = "grey30"))
+
+dist_depth_liquidambar <- cmic_liquidambar + theme(axis.title.y = element_blank()) +
+    basal_liquidambar + theme(axis.title.y = element_blank()) + 
+    plot_layout(nrow = 2, guides = "collect")
+
+dist_out_liquidambar <- ggplot(data.frame(l = cmic_liquidambar$labels$y, x = 1, y = 1)) +
+  geom_text(aes(x, y, label = l), angle = 90, size = 10) + 
+  theme_void() +
+  coord_cartesian(clip = "off") +
+  dist_depth_liquidambar +
+  plot_layout(
+    widths = c(1, 25)
+  )
+```
+
+```{r}
+dist_out_liquidambar 
+```
+Figure S2: Distance to tree and depth effects on microbial biomass (top) and respiration (bottom) for *Liquidambar formosana* in monospecific tree pairs. Effects are predicted from the model (*soil properties ~ depth* * *distance to tree*) with plot as random effect. Distance to tree reports the distance to the closest tree within the monospecific pair. Microbial biomass coloured blue (low) to purple (high), microbial respiration coloured purple (low) to orange (high). The significance levels were standardised across the panels (p<0.05: * , p<0.01: **, p<0.001: ***).
+
+\newpage
+
+## Figure S3: Distance and depth effects for *Sapindus saponaria* in monospecific pairs
+
+```{r, include=FALSE}
+# 2. Sapindus saponaria 
+transect.sapindus <- transect.mono %>% filter(close_species == "Sapindus mukorossi")
+
+## predicting data for basal respiration 
+modelr::data_grid(transect.sapindus, bas_res, close_distance, depth)
+
+mod <- lmer(formula = bas_res ~ close_distance * depth + (1|plot), data = transect.sapindus)
+
+d <- seq(from = 0, to = 10, by = 0.1)
+t <- seq(from = 0, to = 90, by = 0.1)
+
+newdata <- expand.grid(d,t)
+newdata$plot <- as.character("H31")
+
+colnames(newdata) <- c("depth2", "close_distance", "plot")
+
+# adding 2.5 to make 0-5cm = 2.5 and 5-10cm = 7.5
+transect.sapindus$depth2 = transect.sapindus$depth + 2.5
+
+mod.bas <- lmer(formula = bas_res ~ close_distance * depth2 +(1|plot), data = transect.sapindus)
+predict(mod.bas)
+newdata$basres <- predict(mod.bas, newdata = newdata)
+
+min(newdata$basres)
+max(newdata$basres)
+mean(newdata$basres) #used as midpoint in graphic colour scheme
+
+
+# fig. 3 - showing depht and distance effects beautifully
+basal_sapindus <- ggplot(data = newdata, aes(x=close_distance, y=depth2, z=basres, fill = basres)) +
+  geom_raster() +
+  scale_fill_gradient2(low = ("purple4"), 
+                       high = ("darkorange"), 
+                       midpoint = mean(newdata$basres),
+                       breaks = c(2.0,2.5,3.0)) +
+  scale_y_continuous(trans = "reverse", 
+                     breaks = c(0, 5, 10), 
+                     labels = c("0", "5", "10")) +
+  scale_x_continuous(breaks = c(0, 30, 60, 90), 
+                     labels = c("0", "30", "60", "90")) +
+  coord_equal() +
+  labs(x= "Distance to tree [cm]", 
+       y="Depth [cm]", 
+       fill = expression(atop(Microbial~respiration,"["*µl~O[2]~h^{-1}~g^{-1}~dry~soil*"]")),
+       subtitle = "distance    , depth     , distance x depth") +
+  theme(panel.background = element_blank(),
+        plot.title=element_text(hjust=0),
+        axis.title = element_text(size = 28),
+        axis.ticks=element_blank(),
+        axis.text=element_text(size=26),
+        legend.title=element_text(size=28),
+        legend.text=element_text(size=26),
+        legend.position = "right",     axis.line.y = element_line(arrow = grid::arrow(length = unit(0.3, "cm"), 
+                                                                                      ends = "first")),
+        plot.subtitle = element_text(size = 27, 
+                                     hjust = 0.5,
+                                     colour = "grey30"))
+
+## predicting data for cmic 
+modelr::data_grid(transect.sapindus, cmic, close_distance, depth)
+
+mod1 <- lmer(formula = cmic ~ close_distance * depth + (1|plot), data = transect.sapindus)
+
+d <- seq(from = 0, to = 10, by = 0.1)
+t <- seq(from = 0, to = 90, by = 0.1)
+
+newdata1 <- expand.grid(d,t)
+
+newdata1$plot <- as.character("H31")
+
+colnames(newdata1) <- c("depth2", "close_distance", "plot")
+
+# adding 2.5 to make 0-5cm = 2.5 and 5-10cm = 7.5
+transect.sapindus$depth2 = transect.sapindus$depth + 2.5
+
+mod.cmic <- lmer(formula = cmic ~ close_distance * depth2 + (1|plot), data = transect.sapindus)
+predict(mod.cmic)
+newdata1$cmic <- predict(mod.cmic, newdata = newdata1)
+
+min(newdata1$cmic)
+max(newdata1$cmic)
+mean(newdata1$cmic) #used as midpoint in graphic colour scheme
+
+# fig. 3 - showing depht and distance effects beautifully
+cmic_sapindus <- ggplot(data = newdata1, aes(x=close_distance, y=depth2, z=cmic, fill = cmic)) +
+  geom_raster() +
+  #guides(fill=guide_colorbar(ticks.colour = NA)) +
+  scale_fill_gradient2(low = ("royalblue4"), 
+                       high = ("firebrick3"), 
+                       midpoint = mean(newdata1$cmic), 
+                       breaks = c(650, 450, 250)) +
+  scale_y_continuous(trans = "reverse", 
+                     breaks = c(0, 5, 10), 
+                     labels = c("0", "5", "10")) +
+  scale_x_continuous(breaks = c(0, 30, 60, 90), 
+                     labels = c("0", "30", "60", "90")) +
+  coord_equal() +
+  labs(x= "Distance to tree [cm]", 
+       y= "Depth [cm]", 
+       fill = expression(atop(Microbial~biomass,"["*µg~Cmic~g^{-1}~dry~soil*"]")),
+       subtitle = "distance ***, depth ***, distance x depth *") +
+  theme(panel.background = element_blank(),
+        #plot.title=element_text(hjust=0),
+        axis.ticks=element_blank(),
+        axis.text=element_text(size=26),
+        axis.title = element_text(size = 28),
+        legend.title=element_text(size=28),
+        legend.text=element_text(size=26),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.y = element_line(arrow = grid::arrow(length = unit(0.3, "cm"), 
+                                                       ends = "first")),
+        legend.position = "right",
+        plot.subtitle = element_text(size = 27,
+                                     hjust = 0.5,
+                                     colour = "grey30"))
+
+dist_depth_sapindus <- cmic_sapindus + theme(axis.title.y = element_blank()) +
+    basal_sapindus + theme(axis.title.y = element_blank()) + 
+    plot_layout(nrow = 2, guides = "collect")
+
+dist_out_sapindus <- ggplot(data.frame(l = cmic_sapindus$labels$y, x = 1, y = 1)) +
+  geom_text(aes(x, y, label = l), angle = 90, size = 10) + 
+  theme_void() +
+  coord_cartesian(clip = "off") +
+  dist_depth_sapindus +
+  plot_layout(
+    widths = c(1, 25)
+  )
+```
+
+```{r}
+dist_out_sapindus
+```
+Figure S3: Distance to tree and depth effects on microbial biomass (top) and respiration (bottom) for *Sapindus saponaria* in monospecific tree pairs. Effects are predicted from the model (*soil properties ~ depth* * *distance to tree*) with plot as random effect. Distance to tree reports the distance to the closest tree within the monospecific pair. Microbial biomass coloured blue (low) to purple (high), microbial respiration coloured purple (low) to orange (high). The significance levels were standardised across the panels (p<0.05: * , p<0.01: **, p<0.001: ***).
+
+\newpage
+
+## Figure S4: Distance and depth effects for hetero-specific pairs
+
+```{r, include=FALSE}
+# we plot with the distance to Liquidambar formosana on the whole pair distance
+mod <- lmer(formula = bas_res ~ dist_Li * depth + (1|plot), data = transect.het)
+
+d <- seq(from = 0, to = 10, by = 0.1)
+t <- seq(from = 0, to = 120, by = 0.1)
+
+newdata <- expand.grid(d,t)
+newdata$plot <- as.character("H31")
+
+colnames(newdata) <- c("depth2", "dist_Li", "plot")
+
+# adding 2.5 to make 0-5cm = 2.5 and 5-10cm = 7.5
+transect.het$depth2 = transect.het$depth + 2.5
+
+mod.bas <- lmer(formula = bas_res ~ dist_Li * depth2 +(1|plot), data = transect.het)
+predict(mod.bas)
+newdata$basres <- predict(mod.bas, newdata = newdata)
+
+min(newdata$basres)
+max(newdata$basres)
+mean(newdata$basres) #used as midpoint in graphic colour scheme
+
+basal_fig <- ggplot(data = newdata, aes(x=dist_Li, y=depth2, z=basres, fill = basres)) +
+  geom_raster() +
+  scale_fill_gradient2(low = ("purple4"), 
+                       high = ("darkorange"),
+                       midpoint = mean(newdata$basres) + 0.05,
+                       breaks = c(2.1, 2.4, 2.7)) +
+  scale_y_continuous(trans = "reverse",
+                     breaks = c(0, 5, 10),
+                     labels = c("0", "5", "10")) +
+  scale_x_continuous(breaks = c(7, 60, 113), 
+                     labels = c(expression(atop("tree", paste(italic("L. formosana")))),
+                                "center",
+                                expression(atop("tree", paste(italic("S. saponaria")))))) +
+  coord_equal(ratio = 2) +
+  labs(x= "", 
+       y="Depth [cm]", 
+       fill = expression(atop(Microbial~respiration,"["*µl~O[2]~h^{-1}~g^{-1}~dry~soil*"]"))) +
+  theme(panel.background = element_blank(),
+        plot.title=element_text(hjust=0),
+        axis.title = element_text(size = 28),
+        axis.ticks=element_blank(),
+        axis.text=element_text(size=26),
+        legend.title=element_text(size=28),
+        legend.text=element_text(size=26),
+        legend.position = "right", 
+        axis.line.y = element_line(arrow = grid::arrow(length = unit(0.3, "cm"), 
+                                                       ends = "first")),
+        plot.subtitle = element_text(size = 27, 
+                                     hjust = 0.5,
+                                     colour = "grey30"))
+
+ggsave("../03_output/06.hetero-specific-pair.tiff", basal_fig, 
+       width = 30, height = 20, units = "cm", dpi = 600)
+
+# cmic
+mod <- lmer(formula = cmic ~ dist_Li * depth + (1|plot), data = transect.het) #0 = Liqui
+
+d <- seq(from = 0, to = 10, by = 0.1)
+t <- seq(from = 0, to = 120, by = 0.1)
+
+newdata <- expand.grid(d,t)
+newdata$plot <- as.character("H31")
+
+colnames(newdata) <- c("depth2", "dist_Li", "plot")
+
+# adding 2.5 to make 0-5cm = 2.5 and 5-10cm = 7.5
+transect.het$depth2 = transect.het$depth + 2.5
+
+mod.cmic <- lmer(formula = cmic ~ dist_Li * depth2 +(1|plot), data = transect.het)
+predict(mod.cmic)
+newdata$cmic <- predict(mod.cmic, newdata = newdata)
+
+min(newdata$cmic)
+max(newdata$cmic)
+mean(newdata$cmic) #used as midpoint in graphic colour scheme
+
+cmic_fig <- ggplot(data = newdata, aes(x=dist_Li, y=depth2, z=cmic, fill = cmic)) +
+  geom_raster() +
+  scale_fill_gradient2(low = ("royalblue4"), 
+                       high = ("firebrick3"), 
+                       midpoint = mean(newdata$cmic), 
+                       breaks = c(550, 400, 250)) +
+  scale_y_continuous(trans = "reverse",
+                     breaks = c(0, 5, 10),
+                     labels = c("0", "5", "10")) +
+  scale_x_continuous(breaks = c(7, 60, 113), 
+                     labels = c(expression(atop("tree", paste(italic("L. formosana")))),
+                                "center",
+                                expression(atop("tree", paste(italic("S. saponaria")))))) +
+  coord_equal(ratio = 2) +
+  labs(x= "", 
+       y="Depth [cm]", 
+       fill = expression(atop(Microbial~biomass,"["*µg~Cmic~g^{-1}~dry~soil*"]"))) +
+  theme(panel.background = element_blank(),
+        plot.title=element_text(hjust=0),
+        axis.title = element_text(size = 28),
+        axis.ticks=element_blank(),
+        axis.text=element_text(size=26),
+        legend.title=element_text(size=28),
+        legend.text=element_text(size=26),
+        legend.position = "right", 
+        axis.line.y = element_line(arrow = grid::arrow(length = unit(0.3, "cm"), 
+                                                       ends = "first")),
+        plot.subtitle = element_text(size = 27, 
+                                     hjust = 0.5,
+                                     colour = "grey30"))
+
+dist_depth <- cmic_fig + theme(axis.title.y = element_blank()) +
+    basal_fig + theme(axis.title.y = element_blank()) + 
+    plot_layout(nrow = 2, guides = "collect")
+
+dist_out <- ggplot(data.frame(l = cmic_fig$labels$y, x = 1, y = 1)) +
+  geom_text(aes(x, y, label = l), angle = 90, size = 10) + 
+  theme_void() +
+  coord_cartesian(clip = "off") +
+  dist_depth +
+  plot_layout(
+    widths = c(1, 25)
+  )
+```
+
+```{r}
+dist_out
+```
+Figure S4: Distance to tree and depth effects on microbial biomass (top) and respiration (bottom) in heterospecific tree pairs. Effects are predicted from the model (*soil properties ~ depth* * *distance to tree*) with plot as random effect. Microbial biomass coloured blue (low) to red (high), microbial respiration coloured purple (low) to high (orange). The significance levels were standardised across the panels (p < 0.05: * , p <0.01: ** and p < 0.001: ***).
 
 \newpage
 
@@ -355,8 +780,265 @@ CC
 ```
 
 \newpage
+## Figure S5: Spatial distribution of the absolute values of microbial biomass and respiration
+```{r, include = FALSE}
+# models for ggpredict - absolute values
+bas.0.linear.abs <- lmer(bas_res ~ dist.T1.center + (1|plot), data = over.out %>% filter(depth == 0))
+bas.5.linear.abs <- lmer(bas_res ~ dist.T1.center + (1|plot), data = over.out %>% filter(depth == 5))
+cmic.0.linear.abs <- lmer(cmic ~ dist.T1.center + (1|plot), data = over.out %>% filter(depth == 0)) 
+cmic.5.linear.abs <- lmer(cmic ~ dist.T1.center + (1|plot), data = over.out %>% filter(depth == 5))
 
-## Figure S2: Abiotic and biotic drivers of soil microbial biomass and respiration
+## plot distance and depth ----
+absolute.basal <- over.out %>% 
+   ggplot() +
+   #geom_hline(yintercept = 0, linetype ='dashed', col = 'grey') +
+   geom_point(aes(x = dist.T1.center, y = bas_res, 
+                  shape = as.factor(depth), color = as.factor(depth))) +
+   geom_line(data = ggpredict(bas.0.linear.abs, type = "fe") %>% as.data.frame(), 
+             aes(y = dist.T1.center.predicted, x = dist.T1.center.x),
+             color = "#c4bbee", linewidth = 1) +
+   geom_ribbon(data = ggpredict(bas.0.linear.abs, type = "fe") %>% as.data.frame(), 
+               aes(ymin =  dist.T1.center.conf.low, ymax =  dist.T1.center.conf.high, x = dist.T1.center.x),
+               fill = "#c4bbee", alpha = 0.1, linewidth = 1) +
+   geom_line(data = ggpredict(bas.5.linear.abs, type = "fe") %>% as.data.frame(), 
+             aes(y = dist.T1.center.predicted, x = dist.T1.center.x),
+             color = "#332288", linewidth = 1) +
+   geom_ribbon(data = ggpredict(bas.5.linear.abs, type = "fe") %>% as.data.frame(), 
+               aes(ymin =  dist.T1.center.conf.low, ymax =  dist.T1.center.conf.high, x = dist.T1.center.x),
+               fill = "#332288", alpha = 0.075, linewidth = 1) +
+   theme_classic() +
+   theme(axis.title.y = element_blank(), 
+         #axis.text.y = element_blank(), 
+         axis.ticks.y = element_blank(), 
+         axis.line.y = element_blank(),
+         axis.title = element_text(size = 28),
+         axis.text=element_text(size=25),
+         legend.title=element_text(size=28),
+         legend.text=element_text(size=25),
+         legend.position = "right",
+         plot.subtitle = element_text(size = 26, 
+                                      hjust = 0.5,
+                                      colour = "grey30")) +
+   ylim(0.4, 4.5) +
+   labs( x = "", 
+         y = expression(atop(Microbial~respiration,"["*µl~O[2]~h^{-1}~g^{-1}~dry~soil*"]")),
+         subtitle = "distance x depth") +
+   scale_x_continuous(breaks = c(-0.8, 0, 0.8), 
+                      labels = c(expression(atop("tree", paste(italic("L. formosana")))),
+                                 "center",
+                                 expression(atop("tree", paste(italic("S. saponaria")))))) +
+   scale_color_manual(name = "Depth [cm]", 
+                      values = c("#c4bbee", "#332288"), 
+                      labels = c("0 - 5","5 - 10")) +
+   scale_shape_manual(name = "Depth [cm]", 
+                      values = c(16, 17), 
+                      labels = c("0 - 5","5 - 10"))
+
+absolute.cmic <- over.out %>% 
+    ggplot() +
+    #geom_hline(yintercept = 0, linetype ='dashed', col = 'grey') +
+    geom_point(aes(x = dist.T1.center, y = cmic, shape = as.factor(depth), color = as.factor(depth))) +
+    geom_line(data = ggpredict(cmic.0.linear.abs, type = "fe") %>% as.data.frame(), 
+              aes(y = dist.T1.center.predicted, x = dist.T1.center.x),
+              color = "#FFB000", linewidth = 1) +
+    geom_ribbon(data = ggpredict(cmic.0.linear.abs, type = "fe") %>% as.data.frame(), 
+                aes(ymin =  dist.T1.center.conf.low, ymax =  dist.T1.center.conf.high, x = dist.T1.center.x),
+                fill = "#FFB000", alpha = 0.1, linewidth = 1) +
+    geom_line(data = ggpredict(cmic.5.linear.abs, type = "fe") %>% as.data.frame(), aes(y = dist.T1.center.predicted, x = dist.T1.center.x),
+              color = "#805800", linewidth = 1) +
+    geom_ribbon(data = ggpredict(cmic.5.linear.abs, type = "fe") %>% as.data.frame(), 
+                aes(ymin =  dist.T1.center.conf.low, ymax =  dist.T1.center.conf.high, x = dist.T1.center.x),
+                fill = "#805800", alpha = 0.1, linewidth = 1) +
+    theme_classic() +
+    theme(axis.title.y = element_blank(), 
+          axis.text.y = element_blank(), 
+          axis.ticks.y = element_blank(), 
+          axis.line.y = element_blank(),
+          axis.title = element_text(size = 28),
+          axis.text=element_text(size=25),
+          legend.title=element_text(size=28),
+          legend.text=element_text(size=25),
+          legend.position = "right",
+          plot.subtitle = element_text(size = 26, 
+                                       hjust = 0.5,
+                                       colour = "grey30")) +
+    ylim(200, 850) +
+    labs( x = "", 
+          y = expression(atop(Microbial~biomass,"["*µg~Cmic~g^{-1}~dry~soil*"]")),
+          subtitle = "distance x depth") +
+    scale_x_continuous(breaks = c(-0.8, 0, 0.8), 
+                       labels = c(expression(atop("tree", paste(italic("L. formosana")))),
+                                  "center",
+                                  expression(atop("tree", paste(italic("S. saponaria")))))) +
+    scale_color_manual(name = "Depth [cm]", 
+                       values = c("#FFB000", "#805800"), 
+                       labels = c("0 - 5","5 - 10")) +
+    scale_shape_manual(name = "Depth [cm]", 
+                       values = c(16, 17), 
+                       labels = c("0 - 5","5 - 10"))
+
+## plot overyielding mean ----
+
+mean.bas.absolute <- over.out %>% 
+   ggplot() +
+   geom_pointrange(aes(x = mean(depth), y = mean(bas_res), 
+                       ymin = over.out %>% 
+                         filter(depth == 0) %>% 
+                         pull(bas_res) %>% 
+                         mean(), 
+                       ymax = over.out %>% 
+                         filter(depth == 5) %>% 
+                         pull(bas_res) %>% 
+                         mean())) +
+   geom_point(data = over.out, aes(x = mean(depth), y = mean(bas_res)), 
+              shape = 15, size = 6, color = "grey", fill = "grey") +
+   theme_classic() +
+   theme(axis.title = element_text(size = 28),
+         axis.text=element_text(size=25),
+         legend.title=element_text(size=28),
+         legend.text=element_text(size=25),
+         legend.position = "none",
+         plot.subtitle = element_text(size = 26,
+                                      hjust = 0.5,
+                                      colour = "grey30")) +
+   ylim(0.4, 4.5) +
+   scale_x_continuous(breaks = 2.417582,
+                      labels = "mean") +
+   labs( x = "", 
+         y = expression(atop(Microbial~respiration,"["*µl~O[2]~h^{-1}~g^{-1}~dry~soil*"]")),
+         subtitle = "mean")
+
+mean.cmic.absolute <- over.out %>% 
+    ggplot() +
+    geom_pointrange(aes(x = mean(depth), y = mean(cmic), 
+                        ymin = over.out %>% 
+                          filter(depth == 0) %>% 
+                          pull(cmic) %>% 
+                          mean(), 
+                        ymax = over.out %>% 
+                          filter(depth == 5) %>% 
+                          pull(cmic) %>% 
+                          mean())) +
+    geom_point(data = over.out, aes(x = mean(depth), y = mean(cmic)), 
+               shape = 15, size = 6, color = "grey", fill = "grey") +
+    theme_classic() +
+    theme(axis.title = element_text(size = 28),
+          axis.text=element_text(size=25),
+          legend.title=element_text(size=28),
+          legend.text=element_text(size=25),
+          legend.position = "none",
+          plot.subtitle = element_text(size = 26,
+                                       hjust = 0.5,
+                                       colour = "grey30")) +
+    ylim(200, 850) +
+    scale_x_continuous(breaks = 2.417582,
+                       labels = "mean") +
+    labs( x = "", 
+          y = expression(atop(Microbial~biomass,"["*µg~Cmic~g^{-1}~dry~soil*"]")),
+          subtitle = "mean") 
+
+## plot average mean per depth ---- 
+
+tukey.bas <- aov(bas_res ~ depth  %>% as.factor, over.out)
+tukey.cmic <- aov(cmic ~ depth %>% as.factor, over.out)
+summary(tukey.bas)
+summary(tukey.cmic)
+
+depth.bas.absolute <- over.out %>% 
+   ggplot() +
+   geom_pointrange(data = . %>% 
+                     filter(depth == 0), aes(x = depth, y = mean(bas_res), ymin = min(bas_res), ymax = max(bas_res))) +
+   geom_point(data = . %>% 
+                filter(depth == 0), aes(x = depth, y = mean(bas_res)), 
+              size = 6, color = "#c4bbee", fill = "#c4bbee") +
+   geom_pointrange(data = . %>% 
+                     filter(depth == 5), aes(x = depth, y = mean(bas_res), ymin = min(bas_res), ymax = max(bas_res))) +
+   geom_point(data = . %>% 
+                filter(depth == 5), aes(x = depth, y = mean(bas_res)), 
+              shape = 17, size = 6, color = "#332288", fill = "#332288") +
+   theme_classic() +
+   ylim(0.4, 4.5) +
+   scale_x_continuous(limits=c(-1,6),
+                      breaks = c(0,5),
+                      labels = c("0 - 5", "5 - 10")) +
+   labs( x = "", 
+         y = expression(atop(Microbial~respiration,"["*µl~O[2]~h^{-1}~g^{-1}~dry~soil*"]")),
+         subtitle = "depth") +
+   theme(axis.title.y = element_blank(), 
+         axis.text.y = element_blank(), 
+         axis.ticks.y = element_blank(), 
+         axis.line.y = element_blank(),
+         axis.title = element_text(size = 28),
+         axis.text=element_text(size=25),
+         legend.title=element_text(size=28),
+         legend.text=element_text(size=25),
+         legend.position = "none",
+         plot.subtitle = element_text(size = 26,
+                                      hjust = 0.5,
+                                     colour = "grey30"))
+
+depth.cmic.absolute <- over.out %>% 
+    ggplot() +
+    geom_hline(yintercept = 0, linetype ='dashed', col = 'grey') +
+    geom_line(data = data.frame(x = c(0, 5),
+                                y = c(820, 820)), aes(x = x, y = y)) +
+    geom_line(data = data.frame(x = c(0, 0),
+                                y = c(820, 797)), aes(x = x, y = y)) +
+    geom_line(data = data.frame(x = c(5, 5),
+                                y = c(820, 797)), aes(x = x, y = y)) +
+    geom_pointrange(data = . %>% 
+                      filter(depth == 0), aes(x = depth, y = mean(cmic), ymin = min(cmic), ymax = max(cmic))) +
+    geom_point(data = . %>% 
+                 filter(depth == 0), aes(x = depth, y = mean(cmic)), 
+               size = 6, color = "#FFB000", fill = "#FFB000") +
+    geom_pointrange(data = . %>% 
+                      filter(depth == 5), aes(x = depth, y = mean(cmic), ymin = min(cmic), ymax = max(cmic))) +
+    geom_point(data = . %>% 
+                 filter(depth == 5), aes(x = depth, y = mean(cmic)), 
+               shape = 17, size = 6, color = "#805800", fill = "#805800") +
+    theme_classic() +
+    ylim(200, 850) +
+    scale_x_continuous(limits=c(-1,6),
+                       breaks = c(0,5),
+                       labels = c("0 - 5", "5 - 10")) +
+    labs( x = "", 
+          y = expression(atop(Microbial~biomass,"["*µg~Cmic~g^{-1}~dry~soil*"]")),
+          subtitle = "depth") +
+    theme(axis.title.y = element_blank(), 
+          axis.text.y = element_blank(), 
+          axis.ticks.y = element_blank(), 
+          axis.line.y = element_blank(),
+          axis.title = element_text(size = 28),
+          axis.text=element_text(size=25),
+          legend.title=element_text(size=28),
+          legend.text=element_text(size=25),
+          legend.position = "none",
+          plot.subtitle = element_text(size = 26,
+                                       hjust = 0.5,
+                                       colour = "grey30")) +
+    annotate("text", x = 2.5, y = 840, label = "***", size = 7)
+
+## putting plots together --
+
+basal.resp.absolute <- mean.bas.absolute + depth.bas.absolute + absolute.basal + 
+  plot_layout(widths = c(0.25, 0.5, 1)) +
+  plot_annotation(tag_levels = list(c("D", "E", "F")))
+
+micro.biomass.absolute <- mean.cmic.absolute + depth.cmic.absolute + absolute.cmic + 
+  plot_layout(widths = c(0.25, 0.5, 1)) +
+  plot_annotation(tag_levels = list(c("A", "B", "C")))
+
+absolute.hetero <- micro.biomass.absolute / basal.resp.absolute
+```
+
+```{r}
+absolute.hetero
+```
+Figure S5: Distance to tree and depth effects on microbial biomass (top) and respiration (bottom) in heterospecific tree pairs. The mean value (grey square) of microbial biomass (A) and respiration (D) across all depths and positions, for each depth (microbial biomass: B, yellow circle for 0-5 cm; brown triangle for 5-10 cm, and microbial respiration: E, light blue circle for 0-5 cm; dark blue triangle for 5-10 cm), and for each sampling point by depth (microbial biomass: C and respiration: F). Confidence intervals were predicted from models using the "ggpredict" function of the R package *ggeffects*. The significance levels were standardised across the panels (p < 0.05: * , p < 0.01: ** and p < 0.001: ***).
+
+\newpage 
+
+## Figure S6: Abiotic and biotic drivers of soil microbial biomass and respiration
 ```{r, include=FALSE}
 tree_bio_br <- ggplot(data = transect, aes(x = close_biomass * 1000, y = bas_res, col = close_species)) +
   geom_smooth(data= transect, aes(x=close_biomass*1000, y= bas_res), method = 'lm', alpha = 0.2) +
@@ -366,7 +1048,7 @@ tree_bio_br <- ggplot(data = transect, aes(x = close_biomass * 1000, y = bas_res
   theme(plot.background = element_rect(fill = "linen", colour = "linen")) +
   labs( x = "Tree biomass [kg carbon]", y = "", color = "Closest tree", fill = "Closest tree") +
   scale_color_manual(values = c("#6B3074", "#B4CF68"), labels = c(expression(italic("L. formosana")), 
-                                                                  expression(italic("S. mukorossi")))) +
+                                                                  expression(italic("S. saponaria")))) +
                        theme(plot.title = element_text(size = 30),
                                     plot.subtitle = element_text(size = 20),
                                     axis.title = element_text(size = 25),
@@ -382,7 +1064,7 @@ tree_bio_cmic <- ggplot(data = transect, aes(x = close_biomass * 1000, y = cmic,
   labs(x = "Tree biomass [kg carbon]", y = "", 
        color = "Closest tree", fill = "Closest tree") +
   scale_color_grey(start = 0.3, end = 0.7, labels = c(expression(italic("L. formosana")), 
-                                                      expression(italic("S. mukorossi")))) +
+                                                      expression(italic("S. saponaria")))) +
   theme(plot.title = element_text(size = 30),
                                     plot.subtitle = element_text(size = 20),
                                     axis.title = element_text(size = 25),
@@ -519,4 +1201,4 @@ side_graphics <- ggarrange(ggarrange(cmic_graphic, basal_graphic, ncol = 2),
 ```{r}
 side_graphics
 ```
-
+Figure S6: Overview of small scale drivers of microbial biomass and respiration. Effects of tree size and species identity on microbial biomass (A) and respiration (B). Effects of root biomass and distance to understory plants were non-significant on microbial biomass (C, E, respectively) or respiration (D, F, respectively). Positive effect of relative soil water content on microbial biomass (G) and respiration (H). Positive correlation of microbial biomass and respiration (I). Significant effects in colour. 
